@@ -46,7 +46,7 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
 
     let animId: number;
     const morphTargets: Record<string, number> = {};
-    let faceMesh: THREE.Mesh | null = null;
+    const allFaceMeshes: THREE.Mesh[] = [];
     let modelGroup: THREE.Group | null = null;
 
     const W = mount.clientWidth || 480;
@@ -130,12 +130,12 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
 
             modelGroup.position.y += 0.05;
 
-            // Extract morph targets and apply realistic skin material if needed
+            // Extract all meshes with morph targets
             modelGroup.traverse((child) => {
               const mesh = child as THREE.Mesh;
               if (mesh.isMesh) {
                 if (mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
-                  faceMesh = mesh;
+                  allFaceMeshes.push(mesh);
                   Object.assign(morphTargets, mesh.morphTargetDictionary);
                 }
 
@@ -170,12 +170,15 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
 
     // ── 5. Morph Target Setter Helper ────────────────────────────────────────
     function setMorph(names: string[], target: number, speed = 0.2) {
-      if (!faceMesh?.morphTargetInfluences) return;
-      for (const name of names) {
-        const idx = morphTargets[name];
-        if (idx !== undefined && idx < faceMesh.morphTargetInfluences.length) {
-          const cur = faceMesh.morphTargetInfluences[idx] ?? 0;
-          faceMesh.morphTargetInfluences[idx] = THREE.MathUtils.lerp(cur, target, speed);
+      if (!allFaceMeshes.length) return;
+      for (const mesh of allFaceMeshes) {
+        if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) continue;
+        for (const name of names) {
+          const idx = mesh.morphTargetDictionary[name];
+          if (idx !== undefined && idx < mesh.morphTargetInfluences.length) {
+            const cur = mesh.morphTargetInfluences[idx] ?? 0;
+            mesh.morphTargetInfluences[idx] = THREE.MathUtils.lerp(cur, target, speed);
+          }
         }
       }
     }
@@ -191,24 +194,25 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
       const s = stateRef.current;
       const amp = ampRef.current;
 
-      const speakAmp = s === "speaking"
-        ? Math.max(amp, 0.45 + Math.sin(t * 14) * 0.35 + Math.sin(t * 7.5) * 0.2)
+      const isSpeaking = s === "speaking" || amp > 0.015;
+      const speakAmp = isSpeaking
+        ? Math.max(amp, 0.5 + Math.sin(t * 14) * 0.3 + Math.sin(t * 7.5) * 0.2)
         : amp;
 
-      if (faceMesh?.morphTargetInfluences) {
+      if (allFaceMeshes.length > 0) {
         // A. Lip Sync
-        if (s === "speaking") {
+        if (isSpeaking) {
           visemeTimer += 1 / 60;
-          if (visemeTimer > 0.08 + Math.random() * 0.04) {
+          if (visemeTimer > 0.07 + Math.random() * 0.03) {
             visemeTimer = 0;
             currentViseme = (currentViseme + 1) % VISEME_SHAPES.length;
           }
-          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS, ...SMILE_TARGETS], 0, 0.25);
-          setMorph(VISEME_SHAPES[currentViseme], speakAmp, 0.35);
-          setMorph(MOUTH_OPEN_TARGETS, speakAmp * 0.75, 0.3);
+          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS, ...SMILE_TARGETS], 0, 0.3);
+          setMorph(VISEME_SHAPES[currentViseme], speakAmp, 0.4);
+          setMorph(MOUTH_OPEN_TARGETS, speakAmp * 0.85, 0.35);
         } else {
-          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS], 0, 0.12);
-          setMorph(SMILE_TARGETS, 0.1, 0.05);
+          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS], 0, 0.15);
+          setMorph(SMILE_TARGETS, 0.08, 0.05);
         }
 
         // B. Eye Blinking
@@ -233,9 +237,9 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
       // Lighting Colors by State
       const targetRimColor =
         s === "listening" ? 0x00f5a0 :
-        s === "thinking"  ? 0xfbbf24 :
-        s === "speaking"  ? 0xec4899 :
-                            0xa78bfa;
+          s === "thinking" ? 0xfbbf24 :
+            s === "speaking" ? 0xec4899 :
+              0xa78bfa;
       rim.color.lerp(new THREE.Color(targetRimColor), 0.06);
 
       // Model Idle Movement

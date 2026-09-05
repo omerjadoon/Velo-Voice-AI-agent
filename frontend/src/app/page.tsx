@@ -15,7 +15,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { TranscriptSegment } from "./types";
 
 const AudioSphere = dynamic(() => import("./AudioSphere"), { ssr: false });
-const TopographicAvatar = dynamic(() => import("./TopographicAvatar"), { ssr: false });
 const TalkingHeadAvatar = dynamic(() => import("./TalkingHeadAvatar"), { ssr: false });
 
 // Creative thinking messages that cycle dynamically to keep the user engaged
@@ -26,7 +25,7 @@ const THINKING_STAGES = [
   "🔍 Refining thoughts…",
 ];
 
-export type AvatarMode = "talking-head" | "topographic" | "sphere";
+export type AvatarMode = "talking-head" | "sphere";
 
 export default function Home() {
   const [token, setToken] = useState("");
@@ -67,12 +66,6 @@ export default function Home() {
             onClick={() => setAvatarMode("talking-head")}
           >
             🤖 3D Talking Head
-          </button>
-          <button
-            className={`toggle-btn ${avatarMode === "topographic" ? "active" : ""}`}
-            onClick={() => setAvatarMode("topographic")}
-          >
-            👤 Topographic Mesh
           </button>
           <button
             className={`toggle-btn ${avatarMode === "sphere" ? "active" : ""}`}
@@ -152,8 +145,6 @@ function LandingView({
       <div className="sphere-wrap">
         {avatarMode === "talking-head" ? (
           <TalkingHeadAvatar state="idle" amplitude={0} />
-        ) : avatarMode === "topographic" ? (
-          <TopographicAvatar state="idle" amplitude={0} />
         ) : (
           <AudioSphere state="idle" />
         )}
@@ -261,8 +252,6 @@ function AgentUI({ avatarMode }: { avatarMode: AvatarMode }) {
       <div className="hero-sphere">
         {avatarMode === "talking-head" ? (
           <TalkingHeadAvatar state={state} amplitude={volume} />
-        ) : avatarMode === "topographic" ? (
-          <TopographicAvatar state={state} amplitude={volume} />
         ) : (
           <AudioSphere state={state} amplitude={volume} />
         )}
