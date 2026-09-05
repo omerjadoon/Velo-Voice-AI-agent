@@ -11,6 +11,7 @@
   "dependencies": {
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",
+    "@met4citizen/talkinghead": "^1.7.0",
     "@types/three": "^0.185.4",
     "framer-motion": "^13.1.1",
     "livekit-client": "^2.22.2",

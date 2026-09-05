@@ -16,6 +16,7 @@ import { TranscriptSegment } from "./types";
 
 const AudioSphere = dynamic(() => import("./AudioSphere"), { ssr: false });
 const TopographicAvatar = dynamic(() => import("./TopographicAvatar"), { ssr: false });
+const TalkingHeadAvatar = dynamic(() => import("./TalkingHeadAvatar"), { ssr: false });
 
 // Creative thinking messages that cycle dynamically to keep the user engaged
 const THINKING_STAGES = [
@@ -25,10 +26,12 @@ const THINKING_STAGES = [
   "🔍 Refining thoughts…",
 ];
 
+export type AvatarMode = "talking-head" | "topographic" | "sphere";
+
 export default function Home() {
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const [avatarMode, setAvatarMode] = useState<"topographic" | "sphere">("topographic");
+  const [avatarMode, setAvatarMode] = useState<AvatarMode>("talking-head");
 
   const connectToRoom = async () => {
     try {
@@ -54,22 +57,28 @@ export default function Home() {
       <header className="top-bar">
         <div className="brand">
           <span className="brand-dot" />
-          <span className="brand-name">Velo AI Agent</span>
+          <span className="brand-name">Velo Voice AI</span>
         </div>
         
         {/* Avatar mode selector */}
         <div className="avatar-toggle-bar">
           <button
+            className={`toggle-btn ${avatarMode === "talking-head" ? "active" : ""}`}
+            onClick={() => setAvatarMode("talking-head")}
+          >
+            🤖 3D Talking Head
+          </button>
+          <button
             className={`toggle-btn ${avatarMode === "topographic" ? "active" : ""}`}
             onClick={() => setAvatarMode("topographic")}
           >
-            👤 3D Topographic Mesh
+            👤 Topographic Mesh
           </button>
           <button
             className={`toggle-btn ${avatarMode === "sphere" ? "active" : ""}`}
             onClick={() => setAvatarMode("sphere")}
           >
-            🔮 3D Audio Sphere
+            🔮 Audio Sphere
           </button>
         </div>
 
@@ -112,7 +121,7 @@ function LandingView({
 }: {
   connecting: boolean;
   onConnect: () => void;
-  avatarMode: "topographic" | "sphere";
+  avatarMode: AvatarMode;
 }) {
   return (
     <motion.div
@@ -123,7 +132,9 @@ function LandingView({
     >
       {/* Idle avatar preview */}
       <div className="sphere-wrap">
-        {avatarMode === "topographic" ? (
+        {avatarMode === "talking-head" ? (
+          <TalkingHeadAvatar state="idle" amplitude={0} />
+        ) : avatarMode === "topographic" ? (
           <TopographicAvatar state="idle" amplitude={0} />
         ) : (
           <AudioSphere state="idle" />
@@ -145,7 +156,7 @@ function LandingView({
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5, duration: 0.6 }}
       >
-        Real-time 3D Topographic Voice Agent with Lip-Sync & Low Latency.
+        OpenSource 3D Talking Head with Viseme Lip-Sync & Low Latency.
       </motion.p>
 
       <motion.button
@@ -175,7 +186,7 @@ function LandingView({
 }
 
 /* ── Agent UI (after connected) ──────────────────────────────────────────── */
-function AgentUI({ avatarMode }: { avatarMode: "topographic" | "sphere" }) {
+function AgentUI({ avatarMode }: { avatarMode: AvatarMode }) {
   const { state, audioTrack } = useVoiceAssistant();
   const volume = useTrackVolume(audioTrack);
   const chat = useChat();
@@ -246,9 +257,11 @@ function AgentUI({ avatarMode }: { avatarMode: "topographic" | "sphere" }) {
         </AnimatePresence>
       </motion.div>
 
-      {/* Hero Agent Mesh Avatar or 3D Sphere — reacts visually to state & speech volume */}
+      {/* Hero Agent Avatar — reacts visually to state & speech volume */}
       <div className="hero-sphere">
-        {avatarMode === "topographic" ? (
+        {avatarMode === "talking-head" ? (
+          <TalkingHeadAvatar state={state} amplitude={volume} />
+        ) : avatarMode === "topographic" ? (
           <TopographicAvatar state={state} amplitude={volume} />
         ) : (
           <AudioSphere state={state} amplitude={volume} />
