@@ -27,7 +27,7 @@ Velo is engineered for **sub-500ms voice-to-voice turn-taking latency**, enablin
 | :--- | :--- | :---: | :---: | :--- |
 | **1. Voice Activity Detection (VAD)** | Silero VAD v4 | `25 ms` | `35 ms` | Silence & speech start/end boundary detection |
 | **2. Speech-to-Text (STT)** | Groq `whisper-large-v3-turbo` | `110 ms` | `145 ms` | Real-time audio streaming transcription |
-| **3. LLM Processing (TTFT)** | Groq `compound-mini` | `95 ms` | `130 ms` | Time-to-First-Token generation |
+| **3. LLM Processing (TTFT)** | Groq `openai/gpt-oss-20b` | `95 ms` | `130 ms` | Time-to-First-Token generation |
 | **4. Text-to-Speech (TTS)** | Kokoro ONNX (`af_bella`) | `85 ms` | `115 ms` | Sentence-buffered local ONNX chunk synthesis |
 | **5. WebRTC Transport** | LiveKit SFU (Opus/RED) | `15 ms` | `25 ms` | Frame transport over UDP WebRTC data channels |
 | **🔥 TOTAL (Voice-to-Voice)** | **Velo Optimized Pipeline** | **`330 ms`** | **`450 ms`** | **Complete user speech stop ➔ first audible agent byte** |
@@ -71,7 +71,7 @@ sequenceDiagram
 ## 🌟 Key Features
 
 - **⚡ Sub-Second Latency**: Real-time WebRTC audio streaming powered by LiveKit.
-- **🧠 Groq LLM & STT**: High-speed speech recognition (`whisper-large-v3-turbo`) and conversational intelligence (`compound-mini`).
+- **🧠 Groq LLM & STT**: High-speed speech recognition (`whisper-large-v3-turbo`) and conversational intelligence (`openai/gpt-oss-20b`).
 - **🔊 Local Kokoro ONNX TTS**: Embedded, low-latency text-to-speech engine running locally via ONNX Runtime without third-party audio API bottlenecks.
 - **🎙️ Silero VAD**: Voice Activity Detection tuned for fast, natural interruption and conversational turn-taking.
 - **🛠️ Tool Calling & Knowledge Base**: Architecture ready for function calling and organizational RAG (Retrieval-Augmented Generation).
@@ -87,7 +87,7 @@ sequenceDiagram
 | **WebRTC SFU** | LiveKit Server | Manages real-time audio rooms and WebRTC tracks |
 | **Agent Core** | Python 3.12 + `livekit-agents` | Handles STT ➔ LLM ➔ TTS voice loop |
 | **STT Engine** | Groq (`whisper-large-v3-turbo`) | Ultra-fast speech-to-text transcription |
-| **LLM Engine** | Groq (`compound-mini`) | Fast, concise conversational responses |
+| **LLM Engine** | Groq (`openai/gpt-oss-20b`) | Fast, concise conversational responses |
 | **TTS Engine** | Kokoro-ONNX (`af_bella`) | Local CPU/GPU ONNX audio synthesis |
 | **Frontend UI** | Next.js 15, React 19, Three.js | Real-time audio sphere & status dashboard |
 
