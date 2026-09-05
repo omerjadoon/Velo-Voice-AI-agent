@@ -281,23 +281,23 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
   }, []);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center min-h-[420px]">
+    <div className="relative w-full h-full flex items-center justify-center pointer-events-none">
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/50 backdrop-blur-md rounded-2xl p-6 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/50 backdrop-blur-md rounded-2xl p-6 text-center pointer-events-auto">
           <div className="w-10 h-10 border-4 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
           <p className="text-xs font-medium text-cyan-300 tracking-wider uppercase">Loading 3D Talking Head Avatar...</p>
         </div>
       )}
 
       {error && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs text-amber-300 backdrop-blur-md">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs text-amber-300 backdrop-blur-md pointer-events-auto">
           {error}
         </div>
       )}
 
       <div
         ref={mountRef}
-        className="w-full h-full max-w-[500px] max-h-[500px] flex items-center justify-center drop-shadow-[0_0_35px_rgba(0,242,254,0.35)]"
+        className="w-full h-full max-w-[550px] max-h-[550px] flex items-center justify-center drop-shadow-[0_0_35px_rgba(0,242,254,0.35)]"
       />
     </div>
   );
