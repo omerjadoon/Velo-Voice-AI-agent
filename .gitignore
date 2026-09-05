@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+backend/venv/
+venv/
+.venv/
+
+# Next.js & Build outputs
+frontend/.next/
+frontend/out/
+build/
+dist/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Application Logs
+logs/
+*.log
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large ML models & binary weights (>100MB)
+backend/kokoro_models/
+*.onnx
+*.bin
