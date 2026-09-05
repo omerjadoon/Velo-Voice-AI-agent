@@ -3,13 +3,35 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+
+// Module-level singletons to avoid duplicate loader warnings
+let _ktx2Loader: KTX2Loader | null = null;
 
 interface TalkingHeadAvatarProps {
-  /** LiveKit voice assistant state */
   state: string;
-  /** Live audio amplitude / track volume */
   amplitude?: number;
 }
+
+// ARKit morph target groups
+const MOUTH_OPEN_TARGETS = ["jawOpen"];
+const LIP_TARGETS = ["mouthOpen", "mouthFunnel", "mouthPucker"];
+const SMILE_TARGETS = ["mouthSmile_L", "mouthSmile_R"];
+const BLINK_L = ["eyeBlink_L"];
+const BLINK_R = ["eyeBlink_R"];
+const BROW_UP = ["browInnerUp", "browOuterUp_L", "browOuterUp_R"];
+const BROW_DOWN = ["browDown_L", "browDown_R"];
+
+// Viseme cycling phonemes for speech animation
+const VISEME_SHAPES = [
+  ["jawOpen", "mouthFunnel"],            // AA / AH open vowel
+  ["mouthPucker", "jawOpen"],            // OO / UU rounded
+  ["mouthSmile_L", "mouthSmile_R"],      // EE / IH smile
+  ["jawOpen", "mouthOpen"],              // AE / EH open
+  ["mouthPucker"],                       // OW / OH
+  ["jawOpen", "mouthSmile_L"],           // AY blend
+];
 
 export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadAvatarProps) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -18,7 +40,6 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
 
   const stateRef = useRef(state);
   const ampRef = useRef(amplitude);
-
   useEffect(() => { stateRef.current = state; }, [state]);
   useEffect(() => { ampRef.current = amplitude; }, [amplitude]);
 
@@ -27,252 +48,227 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
     if (!mount) return;
 
     let animId: number;
-    let renderer: THREE.WebGLRenderer;
-    let scene: THREE.Scene;
-    let camera: THREE.PerspectiveCamera;
+    const morphTargets: Record<string, number> = {};  // name → index
+    let faceMesh: THREE.Mesh | null = null;
 
-    let headMesh: THREE.Mesh | null = null;
-    let basePositions: Float32Array | null = null;
-    let headGroup: THREE.Group = new THREE.Group();
+    const W = mount.clientWidth || 480;
+    const H = mount.clientHeight || 480;
 
-    const width = mount.clientWidth || 480;
-    const height = mount.clientHeight || 480;
+    // ── Scene & Camera ─────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(28, W / H, 0.01, 100);
+    camera.position.set(0, 0, 2.8);
 
-    // ── 1. Setup Three.js Scene, Camera & WebGL Renderer ─────────────────────
-    scene = new THREE.Scene();
-    scene.add(headGroup);
-
-    camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
-    camera.position.set(0, 0.08, 3.1);
-    camera.lookAt(0, 0, 0);
-
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    // ── Renderer ───────────────────────────────────────────────────────────
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(width, height);
+    renderer.setSize(W, H);
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
-
+    renderer.toneMappingExposure = 1.3;
     mount.appendChild(renderer.domElement);
 
-    // ── 2. Cinematic Studio Lighting Setup ──────────────────────────────────
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
-    scene.add(ambientLight);
+    // ── Studio Lighting ────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 2.0));
 
-    const keyLight = new THREE.DirectionalLight(0xfff0dd, 3.2);
-    keyLight.position.set(2, 3, 3);
-    scene.add(keyLight);
+    const key = new THREE.DirectionalLight(0xfff4e0, 4.0);
+    key.position.set(1.5, 2, 3);
+    scene.add(key);
 
-    const fillLight = new THREE.DirectionalLight(0x00d9f5, 1.8);
-    fillLight.position.set(-2, 1, 2);
-    scene.add(fillLight);
+    const fill = new THREE.DirectionalLight(0x88ccff, 2.5);
+    fill.position.set(-2, 0.5, 2);
+    scene.add(fill);
 
-    const rimLight = new THREE.PointLight(0xa78bfa, 3.5, 6);
-    rimLight.position.set(0, 2, -2);
-    scene.add(rimLight);
+    const rim = new THREE.PointLight(0xa78bfa, 5, 8);
+    rim.position.set(0, 2, -1.5);
+    scene.add(rim);
 
-    // ── 3. Load Local Photorealistic 3D Male Head Model & Skin Texture ───────
-    const textureLoader = new THREE.TextureLoader();
-    const skinTexture = textureLoader.load("/skin_diffuse.jpg");
-    skinTexture.colorSpace = THREE.SRGBColorSpace;
-
-    const gltfLoader = new GLTFLoader();
-    setLoading(true);
-
-    gltfLoader.load(
-      "/avatar.glb",
-      (gltf) => {
-        const model = gltf.scene;
-
-        // Center & scale model
-        model.scale.setScalar(0.28);
-        model.position.set(0, -0.65, 0);
-
-        model.traverse((child) => {
-          if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            headMesh = mesh;
-
-            // Make geometry dynamic for vertex mouth/eye morphing
-            const posAttr = mesh.geometry.attributes.position;
-            basePositions = Float32Array.from(posAttr.array);
-
-            // Apply realistic material with skin diffuse map
-            mesh.material = new THREE.MeshStandardMaterial({
-              map: skinTexture,
-              roughness: 0.55,
-              metalness: 0.1,
-            });
-          }
-        });
-
-        headGroup.add(model);
-        setLoading(false);
-      },
-      undefined,
-      (err) => {
-        console.error("Error loading local 3D avatar:", err);
-        setError("Failed to load 3D head model.");
-        setLoading(false);
+    // ── Load facecap.glb (52 ARKit morph targets) — async init ───────────
+    async function loadFacecap() {
+      if (!_ktx2Loader) {
+        _ktx2Loader = new KTX2Loader();
+        _ktx2Loader.setTranscoderPath("/");
       }
-    );
+      _ktx2Loader.detectSupport(renderer);
 
-    // ── 4. Outer Soundwave Audio Halo Rings ──────────────────────────────────
-    const ringGeo = new THREE.TorusGeometry(1.25, 0.01, 16, 100);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0x00f2fe,
-      transparent: true,
-      opacity: 0.35,
-    });
+      // MeshoptDecoder must be ready before use
+      await MeshoptDecoder.ready;
 
-    const haloRing1 = new THREE.Mesh(ringGeo, ringMat);
-    haloRing1.rotation.x = Math.PI / 2.2;
-    scene.add(haloRing1);
+      const loader = new GLTFLoader();
+      loader.setKTX2Loader(_ktx2Loader);
+      loader.setMeshoptDecoder(MeshoptDecoder);
 
-    const haloRing2 = new THREE.Mesh(ringGeo, ringMat.clone());
-    haloRing2.rotation.y = Math.PI / 4;
-    scene.add(haloRing2);
+      loader.load(
+        "/facecap.glb",
+        (gltf) => {
+          const model = gltf.scene;
+          model.scale.setScalar(4.5);
+          model.position.set(0, -0.22, 0);
+          scene.add(model);
 
-    // ── 5. Animation Loop: Vertex Lip Sync, Eyeblink & Head Movement ───────
-    const startTime = performance.now();
+          // Find the mesh with morph targets
+          model.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.isMesh && mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
+              faceMesh = mesh;
+              Object.assign(morphTargets, mesh.morphTargetDictionary);
+            }
+          });
+
+          setLoading(false);
+        },
+        undefined,
+        (err) => {
+          console.error("facecap load error:", err);
+          setError("Could not load face model.");
+          setLoading(false);
+        }
+      );
+    }
+
+    loadFacecap();
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    // Smoothly set a named morph target
+    function setMorph(names: string[], target: number, speed = 0.18) {
+      if (!faceMesh?.morphTargetInfluences) return;
+      for (const name of names) {
+        const idx = morphTargets[name];
+        if (idx === undefined) continue;
+        const cur = faceMesh.morphTargetInfluences[idx] ?? 0;
+        faceMesh.morphTargetInfluences[idx] = THREE.MathUtils.lerp(cur, target, speed);
+      }
+    }
+
+    // ── Animation Loop ─────────────────────────────────────────────────────
+    const t0 = performance.now();
+    let visemeTimer = 0;
+    let currentViseme = 0;
 
     function animate() {
       animId = requestAnimationFrame(animate);
-
-      const t = (performance.now() - startTime) * 0.001;
+      const t = (performance.now() - t0) * 0.001;
       const s = stateRef.current;
-      const rawAmp = ampRef.current;
+      const amp = ampRef.current;
 
-      const speakingAmp = s === "speaking"
-        ? Math.max(rawAmp, (Math.sin(t * 14) * 0.45 + 0.55) * (0.35 + Math.sin(t * 5.5) * 0.35))
-        : rawAmp;
+      // Simulate amplitude when speaking but no raw amp signal yet
+      const speakAmp = s === "speaking"
+        ? Math.max(amp, 0.4 + Math.sin(t * 13) * 0.35 + Math.sin(t * 7.3) * 0.2)
+        : amp;
 
-      // Color Theme Accents for Lighting
-      if (s === "listening") {
-        fillLight.color.setHex(0x00f5a0);
-        rimLight.color.setHex(0x00f5a0);
-        ringMat.color.setHex(0x00f5a0);
-      } else if (s === "thinking") {
-        fillLight.color.setHex(0xfbbf24);
-        rimLight.color.setHex(0xfbbf24);
-        ringMat.color.setHex(0xfbbf24);
-      } else if (s === "speaking") {
-        fillLight.color.setHex(0x00f2fe);
-        rimLight.color.setHex(0xec4899);
-        ringMat.color.setHex(0x00f2fe);
-      } else {
-        fillLight.color.setHex(0x3b82f6);
-        rimLight.color.setHex(0xa78bfa);
-        ringMat.color.setHex(0x3b82f6);
-      }
-
-      // ── Real-Time 3D Vertex Deformation for Lips & Eye Blinking ────────────
-      if (headMesh && basePositions) {
-        const posAttr = headMesh.geometry.attributes.position;
-        const count = posAttr.count;
-
-        // Eyeblink logic (blink every ~3.6s)
-        const blinkTime = t % 3.6;
-        const isBlinking = blinkTime > 3.45;
-        const blinkAmount = isBlinking ? Math.sin((blinkTime - 3.45) * Math.PI / 0.15) : 0;
-
-        // Lip-sync mouth opening factor
-        const mouthOpenFactor = s === "speaking" ? speakingAmp * 0.45 : 0;
-
-        for (let i = 0; i < count; i++) {
-          const x0 = basePositions[i * 3];
-          const y0 = basePositions[i * 3 + 1];
-          const z0 = basePositions[i * 3 + 2];
-
-          let dx = 0;
-          let dy = 0;
-          let dz = 0;
-
-          // A. Lower Lip & Jaw Vertices (around y ~ -0.45 to -0.85, z > 1.2)
-          if (y0 < -0.35 && z0 > 1.0) {
-            const weight = Math.max(0, 1 - Math.abs(x0) / 0.8) * Math.max(0, (-0.35 - y0) / 0.5);
-            dy -= mouthOpenFactor * weight * 0.25;
-            dz -= mouthOpenFactor * weight * 0.08;
+      if (faceMesh?.morphTargetInfluences) {
+        // ── 1. Lip-sync ────────────────────────────────────────────────────
+        if (s === "speaking") {
+          // Cycle through viseme shapes every ~80–120ms
+          visemeTimer += 1 / 60;
+          if (visemeTimer > 0.09 + Math.random() * 0.05) {
+            visemeTimer = 0;
+            currentViseme = (currentViseme + 1) % VISEME_SHAPES.length;
           }
-
-          // B. Upper Lip Vertices (around y ~ -0.2 to -0.35, z > 1.2)
-          if (y0 >= -0.35 && y0 < -0.15 && z0 > 1.0) {
-            const weight = Math.max(0, 1 - Math.abs(x0) / 0.7);
-            dy += mouthOpenFactor * weight * 0.08;
-          }
-
-          // C. Eyelid Vertices (around y ~ 0.2 to 0.45, z > 1.1)
-          if (y0 > 0.15 && y0 < 0.5 && z0 > 1.1) {
-            const weight = Math.max(0, 1 - Math.abs(x0) / 1.0);
-            dy -= blinkAmount * weight * 0.06;
-          }
-
-          posAttr.setXYZ(i, x0 + dx, y0 + dy, z0 + dz);
+          // Deactivate all lip targets first
+          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS, ...SMILE_TARGETS], 0, 0.3);
+          // Apply current viseme at amplitude-scaled weight
+          setMorph(VISEME_SHAPES[currentViseme], speakAmp, 0.35);
+          // Jaw open proportional to amplitude
+          setMorph(MOUTH_OPEN_TARGETS, speakAmp * 0.7, 0.3);
+        } else {
+          // Close mouth when not speaking
+          setMorph([...MOUTH_OPEN_TARGETS, ...LIP_TARGETS], 0, 0.12);
+          // Subtle idle smile
+          setMorph(SMILE_TARGETS, 0.1, 0.05);
         }
 
-        posAttr.needsUpdate = true;
-        headMesh.geometry.computeVertexNormals();
+        // ── 2. Eye Blinking ─────────────────────────────────────────────────
+        const blinkCycle = t % 3.8;
+        const isBlinking = blinkCycle > 3.6;
+        const blinkVal = isBlinking ? Math.sin((blinkCycle - 3.6) * Math.PI / 0.18) : 0;
+        setMorph(BLINK_L, blinkVal, 0.45);
+        setMorph(BLINK_R, blinkVal, 0.45);
+
+        // ── 3. Brow Expressions ─────────────────────────────────────────────
+        if (s === "thinking") {
+          setMorph(BROW_DOWN, 0.5, 0.05);
+          setMorph(BROW_UP, 0.3, 0.05);
+        } else if (s === "listening") {
+          setMorph(BROW_UP, 0.4, 0.05);
+          setMorph(BROW_DOWN, 0, 0.05);
+        } else {
+          setMorph([...BROW_UP, ...BROW_DOWN], 0, 0.05);
+        }
+
+        // ── 4. Subtle Eye Look Around ───────────────────────────────────────
+        if (s === "thinking") {
+          const lookH = Math.sin(t * 1.2) * 0.25;
+          const lookV = Math.sin(t * 0.9) * 0.2;
+          setMorph(["eyeLookOut_L", "eyeLookIn_R"], Math.max(0, lookH), 0.04);
+          setMorph(["eyeLookIn_L", "eyeLookOut_R"], Math.max(0, -lookH), 0.04);
+          setMorph(["eyeLookUp_L", "eyeLookUp_R"], Math.max(0, lookV), 0.04);
+          setMorph(["eyeLookDown_L", "eyeLookDown_R"], Math.max(0, -lookV), 0.04);
+        } else {
+          setMorph(["eyeLookOut_L", "eyeLookIn_R", "eyeLookIn_L", "eyeLookOut_R",
+            "eyeLookUp_L", "eyeLookUp_R", "eyeLookDown_L", "eyeLookDown_R"], 0, 0.05);
+        }
       }
 
-      // Natural Head Swaying & Idle Breathing
-      headGroup.rotation.y = Math.sin(t * 0.8) * 0.09;
-      headGroup.rotation.x = Math.sin(t * 1.1) * 0.04;
-      headGroup.rotation.z = Math.cos(t * 0.6) * 0.02;
+      // ── 5. Lighting Color by State ────────────────────────────────────────
+      const targetRimColor =
+        s === "listening" ? 0x00f5a0 :
+        s === "thinking"  ? 0xfbbf24 :
+        s === "speaking"  ? 0xec4899 :
+                            0xa78bfa;
+      rim.color.lerp(new THREE.Color(targetRimColor), 0.06);
+      fill.color.lerp(new THREE.Color(
+        s === "speaking" ? 0x00f2fe :
+        s === "listening" ? 0x00d9a0 : 0x88ccff
+      ), 0.06);
 
-      // Ring Rotations & Pulse
-      haloRing1.rotation.z = t * 0.3;
-      haloRing2.rotation.z = -t * 0.25;
-      haloRing1.scale.setScalar(1 + (s === "speaking" ? speakingAmp * 0.12 : Math.sin(t * 2) * 0.03));
-      haloRing2.scale.setScalar(1 + (s === "speaking" ? speakingAmp * 0.16 : Math.cos(t * 2) * 0.03));
+      // ── 6. Idle Head Sway ─────────────────────────────────────────────────
+      if (scene.children[3]) { // model group
+        const model = scene.children.find(c => c.type === "Group");
+        if (model) {
+          model.rotation.y = Math.sin(t * 0.7) * 0.06;
+          model.rotation.z = Math.sin(t * 0.5) * 0.015;
+          model.rotation.x = Math.sin(t * 0.9) * 0.025;
+        }
+      }
 
       renderer.render(scene, camera);
     }
 
     animate();
 
-    // ── 6. Resize Observer ──────────────────────────────────────────────────
-    const handleResize = () => {
-      if (!mount) return;
+    // ── Resize ─────────────────────────────────────────────────────────────
+    const ro = new ResizeObserver(() => {
       const w = mount.clientWidth;
       const h = mount.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-    };
-
-    window.addEventListener("resize", handleResize);
+    });
+    ro.observe(mount);
 
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener("resize", handleResize);
+      ro.disconnect();
       renderer.dispose();
-      ringGeo.dispose();
-      ringMat.dispose();
-      if (mount.contains(renderer.domElement)) {
-        mount.removeChild(renderer.domElement);
-      }
+      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
     };
   }, []);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center min-h-[420px]">
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/50 backdrop-blur-md rounded-2xl p-6 text-center">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/50 backdrop-blur-md rounded-2xl">
           <div className="w-10 h-10 border-4 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-          <p className="text-xs font-medium text-cyan-300 tracking-wider uppercase">Loading Photorealistic 3D Man Avatar...</p>
+          <p className="text-xs font-medium text-cyan-300 tracking-wider uppercase">Loading Talking Head Avatar…</p>
         </div>
       )}
-
       {error && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs text-amber-300 backdrop-blur-md">
           {error}
         </div>
       )}
-
-      <div
-        ref={mountRef}
-        className="w-full h-full max-w-[500px] max-h-[500px] flex items-center justify-center drop-shadow-[0_0_35px_rgba(0,242,254,0.35)]"
-      />
+      <div ref={mountRef} className="w-full h-full max-w-[520px] max-h-[520px]" />
     </div>
   );
 }
