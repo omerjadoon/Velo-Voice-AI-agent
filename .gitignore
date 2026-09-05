@@ -40,3 +40,7 @@ htmlcov/
 backend/kokoro_models/
 *.onnx
 *.bin
+
+# Data folder
+data/
+
