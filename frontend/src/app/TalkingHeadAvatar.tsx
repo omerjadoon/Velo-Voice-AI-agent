@@ -32,8 +32,8 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
     let camera: THREE.PerspectiveCamera;
 
     let headMesh: THREE.Mesh | null = null;
+    let basePositions: Float32Array | null = null;
     let headGroup: THREE.Group = new THREE.Group();
-    let lowerJawMesh: THREE.Mesh | null = null;
 
     const width = mount.clientWidth || 480;
     const height = mount.clientHeight || 480;
@@ -43,7 +43,7 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
     scene.add(headGroup);
 
     camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 100);
-    camera.position.set(0, 0.1, 3.2);
+    camera.position.set(0, 0.08, 3.1);
     camera.lookAt(0, 0, 0);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -59,17 +59,14 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.4);
     scene.add(ambientLight);
 
-    // Warm Key Light
     const keyLight = new THREE.DirectionalLight(0xfff0dd, 3.2);
     keyLight.position.set(2, 3, 3);
     scene.add(keyLight);
 
-    // Cool Fill Light (Cyan / Blue Accent)
     const fillLight = new THREE.DirectionalLight(0x00d9f5, 1.8);
     fillLight.position.set(-2, 1, 2);
     scene.add(fillLight);
 
-    // Purple Rim Light (Backlight separation)
     const rimLight = new THREE.PointLight(0xa78bfa, 3.5, 6);
     rimLight.position.set(0, 2, -2);
     scene.add(rimLight);
@@ -95,6 +92,10 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
           if ((child as THREE.Mesh).isMesh) {
             const mesh = child as THREE.Mesh;
             headMesh = mesh;
+
+            // Make geometry dynamic for vertex mouth/eye morphing
+            const posAttr = mesh.geometry.attributes.position;
+            basePositions = Float32Array.from(posAttr.array);
 
             // Apply realistic material with skin diffuse map
             mesh.material = new THREE.MeshStandardMaterial({
@@ -132,7 +133,7 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
     haloRing2.rotation.y = Math.PI / 4;
     scene.add(haloRing2);
 
-    // ── 5. Animation Loop: Natural Motion & Lip Sync ──────────────────────────
+    // ── 5. Animation Loop: Vertex Lip Sync, Eyeblink & Head Movement ───────
     const startTime = performance.now();
 
     function animate() {
@@ -165,14 +166,58 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
         ringMat.color.setHex(0x3b82f6);
       }
 
+      // ── Real-Time 3D Vertex Deformation for Lips & Eye Blinking ────────────
+      if (headMesh && basePositions) {
+        const posAttr = headMesh.geometry.attributes.position;
+        const count = posAttr.count;
+
+        // Eyeblink logic (blink every ~3.6s)
+        const blinkTime = t % 3.6;
+        const isBlinking = blinkTime > 3.45;
+        const blinkAmount = isBlinking ? Math.sin((blinkTime - 3.45) * Math.PI / 0.15) : 0;
+
+        // Lip-sync mouth opening factor
+        const mouthOpenFactor = s === "speaking" ? speakingAmp * 0.45 : 0;
+
+        for (let i = 0; i < count; i++) {
+          const x0 = basePositions[i * 3];
+          const y0 = basePositions[i * 3 + 1];
+          const z0 = basePositions[i * 3 + 2];
+
+          let dx = 0;
+          let dy = 0;
+          let dz = 0;
+
+          // A. Lower Lip & Jaw Vertices (around y ~ -0.45 to -0.85, z > 1.2)
+          if (y0 < -0.35 && z0 > 1.0) {
+            const weight = Math.max(0, 1 - Math.abs(x0) / 0.8) * Math.max(0, (-0.35 - y0) / 0.5);
+            dy -= mouthOpenFactor * weight * 0.25;
+            dz -= mouthOpenFactor * weight * 0.08;
+          }
+
+          // B. Upper Lip Vertices (around y ~ -0.2 to -0.35, z > 1.2)
+          if (y0 >= -0.35 && y0 < -0.15 && z0 > 1.0) {
+            const weight = Math.max(0, 1 - Math.abs(x0) / 0.7);
+            dy += mouthOpenFactor * weight * 0.08;
+          }
+
+          // C. Eyelid Vertices (around y ~ 0.2 to 0.45, z > 1.1)
+          if (y0 > 0.15 && y0 < 0.5 && z0 > 1.1) {
+            const weight = Math.max(0, 1 - Math.abs(x0) / 1.0);
+            dy -= blinkAmount * weight * 0.06;
+          }
+
+          posAttr.setXYZ(i, x0 + dx, y0 + dy, z0 + dz);
+        }
+
+        posAttr.needsUpdate = true;
+        headMesh.geometry.computeVertexNormals();
+      }
+
       // Natural Head Swaying & Idle Breathing
       headGroup.rotation.y = Math.sin(t * 0.8) * 0.09;
       headGroup.rotation.x = Math.sin(t * 1.1) * 0.04;
       headGroup.rotation.z = Math.cos(t * 0.6) * 0.02;
-
-      // Jaw / Pitch Lip-Sync Speech Modulation
-      const mouthGap = s === "speaking" ? speakingAmp * 0.06 : 0;
-      headGroup.position.y = -mouthGap * 0.5;
 
       // Ring Rotations & Pulse
       haloRing1.rotation.z = t * 0.3;
