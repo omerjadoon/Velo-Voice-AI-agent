@@ -4,6 +4,8 @@
 
 Powered by **LiveKit SFU**, **Groq (STT & LLM)**, **Kokoro ONNX TTS**, and a dynamic **Three.js / React 3D interface**, Velo delivers sub-second voice-to-voice interaction right in your browser.
 
+![Velo Voice AI Interface](screenshots/main.png)
+
 ---
 
 ## 📸 Interface & Visual Agent States
