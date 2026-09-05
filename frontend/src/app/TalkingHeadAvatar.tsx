@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 
 interface TalkingHeadAvatarProps {
   /** LiveKit voice assistant state */
@@ -10,10 +11,8 @@ interface TalkingHeadAvatarProps {
 }
 
 export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadAvatarProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const headRef = useRef<any>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const stateRef = useRef(state);
   const ampRef = useRef(amplitude);
@@ -22,105 +21,245 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
   useEffect(() => { ampRef.current = amplitude; }, [amplitude]);
 
   useEffect(() => {
-    let mounted = true;
+    const mount = mountRef.current;
+    if (!mount) return;
 
-    async function initTalkingHead() {
-      if (!containerRef.current) return;
+    let animId: number;
 
-      try {
-        setLoading(true);
-        setError(null);
+    const width = mount.clientWidth || 450;
+    const height = mount.clientHeight || 450;
 
-        // Dynamically import @met4citizen/talkinghead (client-side only)
-        const { TalkingHead } = await import("@met4citizen/talkinghead");
+    // ── 1. Three.js Scene, Camera & WebGL Renderer ───────────────────────────
+    const scene = new THREE.Scene();
 
-        if (!mounted || !containerRef.current) return;
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+    camera.position.set(0, 0, 4.2);
 
-        // Clear previous canvas
-        containerRef.current.innerHTML = "";
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height);
+    renderer.setClearColor(0x000000, 0);
 
-        // Instantiate TalkingHead instance
-        const head = new TalkingHead(containerRef.current, {
-          cameraView: "upper",
-          lipsyncModules: ["en"],
-          cameraDistance: 1.4,
-          cameraX: 0,
-          cameraY: 0.2,
-        });
+    mount.appendChild(renderer.domElement);
 
-        headRef.current = head;
+    // ── 2. Studio Lighting Setup ─────────────────────────────────────────────
+    const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+    scene.add(ambientLight);
 
-        // Load modern open-source ReadyPlayerMe 3D avatar with ARKit/Oculus visemes
-        await head.showAvatar({
-          url: "https://models.readyplayer.me/64bfa15f0e72c63d7e3934a6.glb?morphTargets=ARKit,Oculus+Visemes",
-          body: "F",
-          avatarMood: "neutral",
-        });
+    const keyLight = new THREE.DirectionalLight(0x00f2fe, 3);
+    keyLight.position.set(2, 3, 3);
+    scene.add(keyLight);
 
-        if (mounted) {
-          setLoading(false);
-        }
-      } catch (err: any) {
-        console.warn("TalkingHead 3D model initialization error:", err);
-        if (mounted) {
-          setError(err.message || "Failed to load 3D Talking Head avatar model.");
-          setLoading(false);
-        }
+    const fillLight = new THREE.DirectionalLight(0x8b5cf6, 2);
+    fillLight.position.set(-2, 1, 2);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.PointLight(0x00f5a0, 4, 6);
+    rimLight.position.set(0, 2, -2);
+    scene.add(rimLight);
+
+    // ── 3. Construct 3D Cybernetic Talking Head Mesh ─────────────────────────
+    const headGroup = new THREE.Group();
+    scene.add(headGroup);
+
+    // A. Main Head Cranium
+    const headGeo = new THREE.SphereGeometry(1.0, 48, 48);
+    headGeo.scale(0.82, 1.15, 0.92); // Proportionate human head shape
+    const headMat = new THREE.MeshStandardMaterial({
+      color: 0x0c0f1d,
+      roughness: 0.25,
+      metalness: 0.8,
+      wireframe: false,
+    });
+    const headMesh = new THREE.Mesh(headGeo, headMat);
+    headGroup.add(headMesh);
+
+    // B. Wireframe Topographic Circuit Overlay
+    const wireGeo = headGeo.clone();
+    wireGeo.scale(1.01, 1.01, 1.01);
+    const wireMat = new THREE.MeshBasicMaterial({
+      color: 0x00f2fe,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35,
+    });
+    const wireMesh = new THREE.Mesh(wireGeo, wireMat);
+    headGroup.add(wireMesh);
+
+    // C. Glowing Cyber Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.12, 24, 24);
+    eyeGeo.scale(1.2, 0.6, 0.6);
+    const eyeMat = new THREE.MeshBasicMaterial({
+      color: 0x00f2fe,
+      transparent: true,
+      opacity: 0.9,
+    });
+
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.28, 0.2, 0.76);
+    headGroup.add(leftEye);
+
+    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+    rightEye.position.set(0.28, 0.2, 0.76);
+    headGroup.add(rightEye);
+
+    // D. Animated Lip-Sync Mouth Mesh
+    const upperLipGeo = new THREE.BoxGeometry(0.36, 0.04, 0.08);
+    const lowerLipGeo = new THREE.BoxGeometry(0.36, 0.04, 0.08);
+    const lipMat = new THREE.MeshStandardMaterial({
+      color: 0x00f2fe,
+      emissive: 0x00f2fe,
+      emissiveIntensity: 0.8,
+      roughness: 0.2,
+    });
+
+    const upperLip = new THREE.Mesh(upperLipGeo, lipMat);
+    upperLip.position.set(0, -0.28, 0.82);
+    headGroup.add(upperLip);
+
+    const lowerLip = new THREE.Mesh(lowerLipGeo, lipMat);
+    lowerLip.position.set(0, -0.34, 0.82);
+    headGroup.add(lowerLip);
+
+    // Inner Mouth Glow Gap
+    const mouthInnerGeo = new THREE.PlaneGeometry(0.32, 0.02);
+    const mouthInnerMat = new THREE.MeshBasicMaterial({
+      color: 0x8b5cf6,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.8,
+    });
+    const mouthInner = new THREE.Mesh(mouthInnerGeo, mouthInnerMat);
+    mouthInner.position.set(0, -0.31, 0.81);
+    headGroup.add(mouthInner);
+
+    // E. Outer Soundwave Audio Halo Rings
+    const ringGeo = new THREE.TorusGeometry(1.35, 0.012, 16, 100);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x00f2fe,
+      transparent: true,
+      opacity: 0.4,
+    });
+    const ring1 = new THREE.Mesh(ringGeo, ringMat);
+    ring1.rotation.x = Math.PI / 2;
+    headGroup.add(ring1);
+
+    const ring2 = new THREE.Mesh(ringGeo, ringMat.clone());
+    ring2.rotation.y = Math.PI / 4;
+    headGroup.add(ring2);
+
+    setLoading(false);
+
+    // ── 4. Animation Loop ───────────────────────────────────────────────────
+    const startTime = performance.now();
+
+    function animate() {
+      animId = requestAnimationFrame(animate);
+
+      const t = (performance.now() - startTime) * 0.001;
+      const s = stateRef.current;
+      const rawAmp = ampRef.current;
+
+      const speakingAmp = s === "speaking"
+        ? Math.max(rawAmp, (Math.sin(t * 14) * 0.45 + 0.55) * (0.4 + Math.sin(t * 6) * 0.35))
+        : rawAmp;
+
+      // Color Theme Updates
+      if (s === "listening") {
+        wireMat.color.setHex(0x00f5a0);
+        eyeMat.color.setHex(0x00f5a0);
+        lipMat.color.setHex(0x00f5a0);
+        lipMat.emissive.setHex(0x00f5a0);
+      } else if (s === "thinking") {
+        wireMat.color.setHex(0xfbbf24);
+        eyeMat.color.setHex(0xfbbf24);
+        lipMat.color.setHex(0xfbbf24);
+        lipMat.emissive.setHex(0xfbbf24);
+      } else if (s === "speaking") {
+        wireMat.color.setHex(0x00f2fe);
+        eyeMat.color.setHex(0x00f2fe);
+        lipMat.color.setHex(0x8b5cf6);
+        lipMat.emissive.setHex(0x8b5cf6);
+      } else {
+        wireMat.color.setHex(0x3b82f6);
+        eyeMat.color.setHex(0x3b82f6);
+        lipMat.color.setHex(0x3b82f6);
+        lipMat.emissive.setHex(0x3b82f6);
       }
+
+      // Head Breathing & Swaying Motion
+      headGroup.rotation.y = Math.sin(t * 0.8) * 0.08;
+      headGroup.rotation.x = Math.sin(t * 1.2) * 0.04;
+      headGroup.rotation.z = Math.cos(t * 0.7) * 0.02;
+
+      // Eyeblink Animation
+      const blinkCycle = t % 3.8;
+      const isBlinking = blinkCycle > 3.65;
+      eyeMat.opacity = isBlinking ? 0.1 : (s === "thinking" ? 0.4 + Math.sin(t * 10) * 0.4 : 0.9);
+
+      // Real-Time Lip-Sync & Mouth Opening
+      const mouthGap = s === "speaking" ? 0.02 + speakingAmp * 0.14 : 0.005;
+      upperLip.position.y = -0.28 + mouthGap * 0.5;
+      lowerLip.position.y = -0.34 - mouthGap * 0.5;
+      mouthInner.scale.y = 1 + mouthGap * 40;
+
+      // Halo soundwave rings rotation & pulse
+      ring1.rotation.z = t * 0.4;
+      ring2.rotation.z = -t * 0.3;
+      ring1.scale.setScalar(1 + (s === "speaking" ? speakingAmp * 0.15 : Math.sin(t * 2) * 0.04));
+      ring2.scale.setScalar(1 + (s === "speaking" ? speakingAmp * 0.2 : Math.cos(t * 2) * 0.04));
+
+      renderer.render(scene, camera);
     }
 
-    initTalkingHead();
+    animate();
+
+    const handleResize = () => {
+      if (!mount) return;
+      const w = mount.clientWidth;
+      const h = mount.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    };
+
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      mounted = false;
-      if (headRef.current && typeof headRef.current.stop === "function") {
-        try {
-          headRef.current.stop();
-        } catch (e) {}
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", handleResize);
+      renderer.dispose();
+      headGeo.dispose();
+      wireGeo.dispose();
+      eyeGeo.dispose();
+      upperLipGeo.dispose();
+      lowerLipGeo.dispose();
+      mouthInnerGeo.dispose();
+      ringGeo.dispose();
+      headMat.dispose();
+      wireMat.dispose();
+      eyeMat.dispose();
+      lipMat.dispose();
+      mouthInnerMat.dispose();
+      ringMat.dispose();
+      if (mount.contains(renderer.domElement)) {
+        mount.removeChild(renderer.domElement);
       }
     };
   }, []);
 
-  // Sync state & audio volume morphing with TalkingHead avatar
-  useEffect(() => {
-    if (!headRef.current) return;
-
-    const head = headRef.current;
-    const s = state;
-
-    try {
-      if (s === "listening") {
-        head.setMood?.("curious");
-      } else if (s === "thinking") {
-        head.setMood?.("thinking");
-      } else if (s === "speaking") {
-        head.setMood?.("happy");
-      } else {
-        head.setMood?.("neutral");
-      }
-    } catch (e) {
-      // Ignore minor state mood errors
-    }
-  }, [state]);
-
   return (
-    <div className="relative w-full h-full flex items-center justify-center min-h-[400px]">
+    <div className="relative w-full h-full flex items-center justify-center min-h-[420px]">
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/40 backdrop-blur-md rounded-2xl">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 bg-black/50 backdrop-blur-md rounded-2xl p-6 text-center">
           <div className="w-10 h-10 border-4 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
-          <p className="text-xs font-medium text-cyan-300 tracking-wider uppercase">Loading 3D OpenSource Talking Head Avatar…</p>
-        </div>
-      )}
-
-      {error && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 px-4 py-2 bg-amber-500/20 border border-amber-500/40 rounded-full text-xs text-amber-300 backdrop-blur-md">
-          {error} (Falling back to Topographic Avatar mode)
+          <p className="text-xs font-medium text-cyan-300 tracking-wider uppercase">Loading 3D Talking Head Avatar...</p>
         </div>
       )}
 
       <div
-        ref={containerRef}
-        className="w-full h-full max-w-[500px] max-h-[500px] flex items-center justify-center"
+        ref={mountRef}
+        className="w-full h-full max-w-[500px] max-h-[500px] flex items-center justify-center drop-shadow-[0_0_35px_rgba(0,242,254,0.35)]"
       />
     </div>
   );
