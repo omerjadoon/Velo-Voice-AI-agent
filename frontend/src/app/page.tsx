@@ -130,6 +130,24 @@ function LandingView({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: "easeOut" }}
     >
+      <motion.h1
+        className="landing-title"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2, duration: 0.6 }}
+      >
+        Talk to Velo AI
+      </motion.h1>
+
+      <motion.p
+        className="landing-sub"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.35, duration: 0.6 }}
+      >
+        OpenSource 3D Talking Head with Viseme Lip-Sync & Low Latency.
+      </motion.p>
+
       {/* Idle avatar preview */}
       <div className="sphere-wrap">
         {avatarMode === "talking-head" ? (
@@ -141,31 +159,13 @@ function LandingView({
         )}
       </div>
 
-      <motion.h1
-        className="landing-title"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.6 }}
-      >
-        Talk to Velo AI
-      </motion.h1>
-
-      <motion.p
-        className="landing-sub"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5, duration: 0.6 }}
-      >
-        OpenSource 3D Talking Head with Viseme Lip-Sync & Low Latency.
-      </motion.p>
-
       <motion.button
         className="start-btn"
         onClick={onConnect}
         disabled={connecting}
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.65, duration: 0.4 }}
+        transition={{ delay: 0.5, duration: 0.4 }}
         whileHover={{ scale: 1.06 }}
         whileTap={{ scale: 0.97 }}
       >

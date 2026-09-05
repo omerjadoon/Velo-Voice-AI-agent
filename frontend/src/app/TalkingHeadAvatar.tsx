@@ -54,8 +54,8 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
 
     // ── 1. Three.js Scene, Camera & WebGL Renderer ───────────────────────────
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(32, W / H, 0.1, 100);
-    camera.position.set(0, 0.1, 2.5);
+    const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
+    camera.position.set(0, 0.04, 3.2);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -125,7 +125,7 @@ export default function TalkingHeadAvatar({ state, amplitude = 0 }: TalkingHeadA
             modelGroup.position.sub(center);
             const maxDim = Math.max(size.x, size.y, size.z);
             if (maxDim > 0) {
-              modelGroup.scale.setScalar(1.65 / maxDim);
+              modelGroup.scale.setScalar(1.15 / maxDim);
             }
 
             modelGroup.position.y += 0.05;
