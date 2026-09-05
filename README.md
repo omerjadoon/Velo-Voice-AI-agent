@@ -6,6 +6,17 @@ Powered by **LiveKit SFU**, **Groq (STT & LLM)**, **Kokoro ONNX TTS**, and a dyn
 
 ---
 
+## 📸 Interface & Visual Agent States
+
+Velo features an audio-reactive 3D sphere visualization that dynamically shifts colors and pulse frequencies based on conversation state:
+
+| 🟢 Listening | 🟡 Thinking | 🔵 Speaking |
+| :---: | :---: | :---: |
+| ![Listening State](screenshots/Listening.png) | ![Thinking State](screenshots/thinking.png) | ![Speaking State](screenshots/Speaking.png) |
+| *Capturing user audio with real-time VAD boundary detection* | *Streaming LLM reasoning and pre-warming TTS audio chunks* | *Synthesizing local Kokoro-ONNX audio frames over WebRTC* |
+
+---
+
 ## ⚡ Latency & Performance Report
 
 Velo is engineered for **sub-500ms voice-to-voice turn-taking latency**, enabling seamless, human-like conversations without agonizing delays.
