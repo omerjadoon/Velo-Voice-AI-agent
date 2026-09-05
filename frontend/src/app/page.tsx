@@ -8,14 +8,14 @@ import {
   VoiceAssistantControlBar,
   useVoiceAssistant,
   useChat,
+  useTrackVolume,
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { motion, AnimatePresence } from "framer-motion";
 import { TranscriptSegment } from "./types";
 
 const AudioSphere = dynamic(() => import("./AudioSphere"), { ssr: false });
-
-
+const TopographicAvatar = dynamic(() => import("./TopographicAvatar"), { ssr: false });
 
 // Creative thinking messages that cycle dynamically to keep the user engaged
 const THINKING_STAGES = [
@@ -28,6 +28,7 @@ const THINKING_STAGES = [
 export default function Home() {
   const [token, setToken] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [avatarMode, setAvatarMode] = useState<"topographic" | "sphere">("topographic");
 
   const connectToRoom = async () => {
     try {
@@ -53,15 +54,36 @@ export default function Home() {
       <header className="top-bar">
         <div className="brand">
           <span className="brand-dot" />
-          <span className="brand-name">Voice AI Agent</span>
+          <span className="brand-name">Velo AI Agent</span>
         </div>
+        
+        {/* Avatar mode selector */}
+        <div className="avatar-toggle-bar">
+          <button
+            className={`toggle-btn ${avatarMode === "topographic" ? "active" : ""}`}
+            onClick={() => setAvatarMode("topographic")}
+          >
+            👤 3D Topographic Mesh
+          </button>
+          <button
+            className={`toggle-btn ${avatarMode === "sphere" ? "active" : ""}`}
+            onClick={() => setAvatarMode("sphere")}
+          >
+            🔮 3D Audio Sphere
+          </button>
+        </div>
+
         <p className="brand-sub">Developed by Omer Khan Jadoon</p>
       </header>
 
       {/* Main content */}
       <main className="main-content">
         {!token ? (
-          <LandingView connecting={connecting} onConnect={connectToRoom} />
+          <LandingView
+            connecting={connecting}
+            onConnect={connectToRoom}
+            avatarMode={avatarMode}
+          />
         ) : (
           <LiveKitRoom
             video={false}
@@ -73,7 +95,7 @@ export default function Home() {
             className="lk-room-fullscreen"
             onDisconnected={() => { setToken(""); setConnecting(false); }}
           >
-            <AgentUI />
+            <AgentUI avatarMode={avatarMode} />
             <RoomAudioRenderer />
           </LiveKitRoom>
         )}
@@ -83,7 +105,15 @@ export default function Home() {
 }
 
 /* ── Landing (before connected) ──────────────────────────────────────────── */
-function LandingView({ connecting, onConnect }: { connecting: boolean; onConnect: () => void }) {
+function LandingView({
+  connecting,
+  onConnect,
+  avatarMode,
+}: {
+  connecting: boolean;
+  onConnect: () => void;
+  avatarMode: "topographic" | "sphere";
+}) {
   return (
     <motion.div
       className="landing"
@@ -91,9 +121,13 @@ function LandingView({ connecting, onConnect }: { connecting: boolean; onConnect
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, ease: "easeOut" }}
     >
-      {/* Idle sphere preview */}
+      {/* Idle avatar preview */}
       <div className="sphere-wrap">
-        <AudioSphere state="idle" />
+        {avatarMode === "topographic" ? (
+          <TopographicAvatar state="idle" amplitude={0} />
+        ) : (
+          <AudioSphere state="idle" />
+        )}
       </div>
 
       <motion.h1
@@ -102,7 +136,7 @@ function LandingView({ connecting, onConnect }: { connecting: boolean; onConnect
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.3, duration: 0.6 }}
       >
-        Talk to your AI
+        Talk to Velo AI
       </motion.h1>
 
       <motion.p
@@ -111,7 +145,7 @@ function LandingView({ connecting, onConnect }: { connecting: boolean; onConnect
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5, duration: 0.6 }}
       >
-        Real-time voice, low latency, local TTS.
+        Real-time 3D Topographic Voice Agent with Lip-Sync & Low Latency.
       </motion.p>
 
       <motion.button
@@ -141,8 +175,9 @@ function LandingView({ connecting, onConnect }: { connecting: boolean; onConnect
 }
 
 /* ── Agent UI (after connected) ──────────────────────────────────────────── */
-function AgentUI() {
-  const { state } = useVoiceAssistant();
+function AgentUI({ avatarMode }: { avatarMode: "topographic" | "sphere" }) {
+  const { state, audioTrack } = useVoiceAssistant();
+  const volume = useTrackVolume(audioTrack);
   const chat = useChat();
 
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
@@ -211,9 +246,13 @@ function AgentUI() {
         </AnimatePresence>
       </motion.div>
 
-      {/* Hero 3D sphere — reacts visually to state */}
+      {/* Hero Agent Mesh Avatar or 3D Sphere — reacts visually to state & speech volume */}
       <div className="hero-sphere">
-        <AudioSphere state={state} />
+        {avatarMode === "topographic" ? (
+          <TopographicAvatar state={state} amplitude={volume} />
+        ) : (
+          <AudioSphere state={state} amplitude={volume} />
+        )}
       </div>
 
       {/* Transcript — bottom floating panel */}
@@ -234,7 +273,7 @@ function AgentUI() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.25 }}
               >
-                <span className="t-who">{seg.role === "user" ? "You" : "AI"}</span>
+                <span className="t-who">{seg.role === "user" ? "You" : "Velo"}</span>
                 <p>{seg.text}</p>
               </motion.div>
             ))}
@@ -248,7 +287,7 @@ function AgentUI() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                <span className="t-who">AI</span>
+                <span className="t-who">Velo</span>
                 <div className="t-thinking-content">
                   <span className="t-stage-text">{THINKING_STAGES[stageIndex]}</span>
                   <div className="t-dots">
