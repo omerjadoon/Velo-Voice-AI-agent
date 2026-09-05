@@ -11,6 +11,9 @@ echo "Logs will be saved to: $LOGS_DIR"
 lsof -ti :8081 | xargs kill -9 2>/dev/null
 lsof -ti :7880 | xargs kill -9 2>/dev/null
 pkill -f "python agent.py" 2>/dev/null
+pkill -f "python.*agent" 2>/dev/null
+pkill -f "kokoro_tts" 2>/dev/null
+pkill -f "livekit.*agent" 2>/dev/null
 sleep 1
 
 # Start LiveKit dev server in background and pipe to log file + terminal
